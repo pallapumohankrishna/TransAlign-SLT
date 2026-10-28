@@ -32,48 +32,7 @@ The BERT/MOT semantic branch is **training-only**, while TranslationCTC scores c
 
 ---
 
-## Architecture
 
-The following diagrams illustrate the training and inference pipelines described in **Figure 1 of the paper**.
-
-### (a) Training Phase
-
-```mermaid
-flowchart LR
-    V["Sign Video"] --> R["ResNet18"]
-    R --> H["HMTF"]
-    H --> B["BiLSTM"]
-    B --> D["Bahdanau Attention + GRU"]
-    D --> P["Decoder Predictions"]
-
-    Y["Target Translation"] -.-> TF["Teacher Forcing"]
-    TF -.-> D
-
-    P -.-> CE["Translation Cross-Entropy"]
-    Y -.-> CE
-
-    H -.-> C1["Conv CTC Logits"]
-    B -.-> C2["Seq CTC Logits"]
-
-    C1 -.-> L1["TranslationCTC - Conv"]
-    C2 -.-> L2["TranslationCTC - Seq"]
-
-    Y -.-> L1
-    Y -.-> L2
-
-    C1 -.-> KD["Knowledge Distillation"]
-    C2 -.-> KD
-
-    Y -.-> E["Frozen Corpus-Adapted BERT"]
-    E -.-> WP["Word-Level Pooling"]
-    WP -.-> OT["Masked Entropic OT"]
-    B -.-> OT
-
-    classDef main fill:#e8f2ff,stroke:#326caa,color:#163c63
-    classDef aux fill:#fff3e5,stroke:#ca8740,color:#70420b
-    class R,H,B,D main
-    class CE,L1,L2,KD,OT aux
-```
 
 **Training architecture details:**
 
