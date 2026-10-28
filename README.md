@@ -1,122 +1,284 @@
+
 # TransAlign-SLT
 
 ### Complementary Temporal and Semantic Supervision for Gloss-Free Sign Language Translation
 
-**Accepted at the Workshop on Sign Language Processing (WSLP 2026), co-located with EMNLP 2026**
+**Published at the Second Workshop on Sign Language Processing (WSLP 2026), co-located with EMNLP 2026, Budapest, Hungary.**
 
-**Authors:** Pallapu Mohan Krishna · Uppala Sanjay Kumar · M. K. Bhuyan · Debanga Raj Neog  
-**Affiliation:** Indian Institute of Technology Guwahati, India  
-**Contact:** [k.pallapu@iitg.ac.in](mailto:k.pallapu@iitg.ac.in) · [Research website](https://pallapumohankrishna.github.io/)
+**Authors:** Pallapu Mohan Krishna · Uppala Sanjay Kumar · M. K. Bhuyan · Debanga Raj Neog
 
-> **Code release status:** The source code is **not publicly available yet**. We are extending this research and plan to release the implementation and reproducibility materials later. This repository currently documents the accepted paper and its results. No release date is announced.
+**Affiliation:** Indian Institute of Technology Guwahati, India
+
+**Contact:** [k.pallapu@iitg.ac.in](mailto:k.pallapu@iitg.ac.in) · [Research Website](https://pallapumohankrishna.github.io/)
+
+### 📄 Paper and Resources
+
+[**Paper (ACL Anthology)**](https://aclanthology.org/2026.wslp-1.21/) · [**PDF**](https://aclanthology.org/2026.wslp-1.21.pdf) · [**Project Page**](https://pallapumohankrishna.github.io/projects/transalign-slt/) · [**Publications**](https://pallapumohankrishna.github.io/publications/)
+
+> **Code release status:** The source code is **not publicly available yet**. We are extending this research and plan to release the implementation and reproducibility materials later. This repository currently documents the published paper, proposed framework, and experimental findings. No code release date has been announced.
+
+---
 
 ## Overview
 
-**TransAlign-SLT** is a lightweight, **fully gloss-free sign language translation (SLT)** framework trained from paired sign videos and spoken-language translations. It does not require gloss annotations or pseudo-gloss supervision.
+**TransAlign-SLT** is a lightweight, **fully gloss-free Sign Language Translation (SLT)** framework trained from paired sign videos and spoken-language translations. It does not require gloss annotations or pseudo-gloss supervision.
 
-Learning from sentence-level translations alone makes it challenging to recover temporal structure and visual–language correspondence. TransAlign-SLT combines two complementary training signals:
+Learning from sentence-level translations alone makes it challenging to recover temporal structure and visual–language correspondence.
 
-- **TranslationCTC:** Auxiliary CTC supervision over translation tokens for coarse temporal-linguistic regularization.
-- **Masked Entropic Optimal Transport (MOT):** Soft semantic correspondence between visual temporal features and word-level representations from a frozen, corpus-adapted BERT encoder.
+To address these challenges, TransAlign-SLT combines two complementary training signals:
 
-The BERT/MOT semantic branch operates **only during training**. Inference uses a visual-temporal encoder and a compact attention-based GRU decoder, optionally with post-hoc TranslationCTC rescoring of completed hypotheses.
+- **TranslationCTC:** Auxiliary Connectionist Temporal Classification supervision over translation tokens, providing coarse temporal-linguistic regularization.
+
+- **Masked Entropic Optimal Transport (MOT):** Soft semantic correspondence between visual temporal features and contextualized word-level representations from a frozen, corpus-adapted BERT encoder.
+
+Together, these objectives encourage improved temporal organization and semantic alignment without introducing gloss supervision.
+
+The BERT/MOT semantic branch operates **only during training**. The main inference pipeline uses a visual-temporal encoder and a compact attention-based GRU decoder, optionally followed by post-hoc TranslationCTC rescoring of completed hypotheses.
+
+---
 
 ## Framework
 
 ```mermaid
 flowchart LR
-    V["Sign video"] --> R["ResNet18"]
+    V["Sign Video"] --> R["ResNet18"]
     R --> H["HMTF"]
     H --> B["BiLSTM"]
-    B --> D["Bahdanau attention + GRU"]
+    B --> D["Bahdanau Attention + GRU"]
     D --> Y["Translation"]
+
     H -.-> C1["TranslationCTC"]
     B -.-> C2["TranslationCTC"]
-    T["Training translations"] --> E["Frozen corpus-adapted BERT"]
-    E -.-> O["MOT"]
+
+    T["Training Translations"] --> E["Frozen Corpus-Adapted BERT"]
+    E -.-> O["Masked Entropic OT"]
     B -.-> O
 ```
 
-Solid arrows indicate the main inference path. Dotted arrows show additional training supervision. TranslationCTC can also score completed beam-search hypotheses in an optional post-hoc reranking step.
+**Framework interpretation:**
 
-### Method highlights
+- **Solid arrows** represent the primary inference pathway.
+- **Dotted arrows** represent additional training-time supervision.
+- BERT and MOT are not required during inference.
+- TranslationCTC can optionally rescore completed beam-search hypotheses after autoregressive decoding.
 
-1. **Visual-temporal modeling:** ImageNet-initialized ResNet18 followed by Hierarchical Multi-scale Temporal Fusion (HMTF) and BiLSTM. HMTF adapts the architectural design of GPGN **without initializing from gloss-supervised GPGN weights**.
-2. **Temporal guidance:** TranslationCTC at intermediate sequence representations, with the training coefficient decaying from **0.5 to 0.1**.
-3. **Semantic guidance:** Training-set-only BERT corpus adaptation, subword-to-word pooling, and masked optimal transport between text and visual features.
-4. **Translation:** Bahdanau attention and GRU decoder, with optional completed-hypothesis CTC reranking.
-5. **Training objectives:** Translation cross-entropy, auxiliary TranslationCTC, distillation, and MOT.
+### Method Highlights
 
-## Main results
+**1. Visual-Temporal Modeling**
+
+An ImageNet-initialized ResNet18 extracts visual representations from sign video frames.
+
+Hierarchical Multi-scale Temporal Fusion (HMTF) enhances temporal features, followed by a BiLSTM that captures bidirectional temporal dependencies.
+
+HMTF adapts the temporal feature extraction architecture of GPGN **without initializing from gloss-supervised GPGN weights**.
+
+**2. Temporal Supervision — TranslationCTC**
+
+TranslationCTC provides auxiliary temporal-linguistic supervision using the available translation tokens.
+
+The auxiliary loss coefficient decays from **0.5 to 0.1** during training.
+
+This encourages temporal organization while reducing the auxiliary objective's relative influence later in training.
+
+**3. Semantic Supervision — MOT**
+
+A corpus-adapted, frozen BERT encoder produces contextual text representations.
+
+Subword-to-word pooling constructs word-level semantic features.
+
+Masked Entropic Optimal Transport aligns the visual temporal representations with these word-level features through a soft transport plan.
+
+**4. Translation Decoder**
+
+An attention-based GRU decoder with Bahdanau attention generates spoken-language translations autoregressively.
+
+Optional TranslationCTC-based post-hoc reranking evaluates completed beam-search candidates.
+
+**5. Training Objectives**
+
+The overall framework combines:
+
+- Translation cross-entropy loss
+- Auxiliary TranslationCTC loss
+- Distillation loss
+- Masked Entropic Optimal Transport loss
+
+---
+
+## Main Results
+
+We evaluate TransAlign-SLT on two widely used sign language translation benchmarks.
 
 | Benchmark | Test BLEU-4 ↑ | Test ROUGE-L ↑ |
 |:--|--:|--:|
-| **PHOENIX14T** (German weather forecast broadcasts) | **23.54** | **48.46** |
-| **CSL-Daily** (Chinese daily-life signing) | **16.39** | **44.68** |
+| **PHOENIX14T** | **23.54** | **48.46** |
+| **CSL-Daily** | **16.39** | **44.68** |
 
-**Inference model:** **45.6M parameters** and **123 GFLOPs** (64 RGB frames, 224 × 224). These are not hardware-matched latency or peak-memory comparisons against other systems.
+**Datasets:**
 
-### Component ablations
+- **PHOENIX14T:** German Sign Language videos from weather forecast broadcasts, paired with German translations.
+- **CSL-Daily:** Chinese Sign Language videos covering everyday-life expressions, paired with Chinese translations.
 
-All scores below are **PHOENIX14T development BLEU-4**, not test BLEU-4.
+### Model Complexity
 
-| Analysis | Configuration | Dev BLEU-4 ↑ |
-|:--|:--|--:|
-| Temporal modeling | TemporalConv + BiLSTM | 18.18 |
-| | HMTF without BiLSTM | 20.14 |
-| | **HMTF + BiLSTM** | **22.86** |
-| Semantic supervision | Baseline | 21.54 |
-| | + BERT/MOT semantic guidance | 21.85 |
-| | + MLM adaptation | 22.54 |
-| | **+ Word pooling** | **22.86** |
-| TranslationCTC weighting | Without TranslationCTC | 10.50 |
-| | Constant weight 0.5 | 22.42 |
-| | **Decay from 0.5 to 0.1** | **22.86** |
+| Property | Reported Value |
+|:--|--:|
+| Inference parameters | **45.6M** |
+| Computational cost | **123 GFLOPs** |
+| Input resolution | 224 × 224 |
+| FLOPs evaluation input | 64 RGB frames |
 
-These ablations establish useful component effects but do **not** constitute a fully controlled factorial study of TranslationCTC–MOT interactions.
+These figures characterize the reported inference configuration. They should not be interpreted as hardware-matched latency or peak-memory comparisons against other systems.
 
-## Experimental details reported in the paper
+---
 
-- **Benchmarks:** PHOENIX14T and CSL-Daily.
-- **Evaluation:** NLTK corpus BLEU with smoothing method 3; average sentence-level ROUGE-L F1.
-- **Backbone:** torchvision ImageNet-pretrained ResNet18.
-- **Sampling:** TSN-style temporal segment sampling during training, uniformly spaced sampling at inference.
-- **MOT:** Masked valid positions, entropy regularization ε = 0.1, 50 log-space Sinkhorn iterations.
-- **Distillation:** Temperature τ = 8.
-- **Inference decoding:** Beam size 10; optional post-hoc CTC coefficient β_ctc = 0.6.
-- **Experiment hardware:** NVIDIA RTX A6000.
+## Component Ablation Studies
 
-Runnable scripts, environment specifications, and checkpoints are **not included in this repository at present**.
+The following experiments report **PHOENIX14T development BLEU-4**.
 
-## Related work
+### 1. Temporal Modeling
 
-The text-level CTC/attention approach of Tan *et al.* in [*Improvement in Sign Language Translation Using Text CTC Alignment* (COLING 2025)](https://aclanthology.org/2025.coling-main.219/) provides relevant motivation for translation-level CTC supervision. TransAlign-SLT combines a decayed auxiliary TranslationCTC objective with MOT-based semantic alignment.
+| Configuration | Dev BLEU-4 ↑ |
+|:--|--:|
+| TemporalConv + BiLSTM | 18.18 |
+| HMTF without BiLSTM | 20.14 |
+| **HMTF + BiLSTM** | **22.86** |
 
-## Code release roadmap
+The results support combining multi-scale temporal feature extraction with bidirectional sequential modeling.
 
-- [x] WSLP 2026 paper accepted
-- [x] Research overview and main evaluation results documented
+### 2. Semantic Supervision
+
+| Configuration | Dev BLEU-4 ↑ |
+|:--|--:|
+| Baseline | 21.54 |
+| + BERT/MOT semantic guidance | 21.85 |
+| + MLM adaptation | 22.54 |
+| **+ Word pooling** | **22.86** |
+
+The results indicate that corpus adaptation and word-level semantic representations contribute to the effectiveness of semantic guidance.
+
+### 3. TranslationCTC Weighting
+
+| Configuration | Dev BLEU-4 ↑ |
+|:--|--:|
+| Without TranslationCTC | 10.50 |
+| Constant weight 0.5 | 22.42 |
+| **Decaying weight 0.5 → 0.1** | **22.86** |
+
+TranslationCTC provides an important auxiliary supervisory signal, while the decaying schedule performs better than the evaluated constant-weight configuration.
+
+**Note:** These ablations demonstrate component-level effects but do not constitute a fully controlled factorial study of TranslationCTC–MOT interactions.
+
+---
+
+## Experimental Details
+
+The following settings are reported in the paper.
+
+| Component | Configuration |
+|:--|:--|
+| Visual backbone | ImageNet-pretrained ResNet18 |
+| Temporal encoder | HMTF + BiLSTM |
+| Translation decoder | Bahdanau attention + GRU |
+| Training sampling | TSN-style temporal segment sampling |
+| Inference sampling | Uniformly spaced frames |
+| Semantic encoder | Frozen corpus-adapted BERT |
+| OT regularization | Entropic regularization, ε = 0.1 |
+| Sinkhorn iterations | 50, log-space |
+| Distillation temperature | τ = 8 |
+| Beam size | 10 |
+| Optional CTC reranking coefficient | β_ctc = 0.6 |
+| Experimental hardware | NVIDIA RTX A6000 |
+
+**Evaluation protocol:**
+
+- BLEU: NLTK corpus BLEU with smoothing method 3.
+- ROUGE-L: Average sentence-level ROUGE-L F1.
+
+For implementation-specific training configurations and additional experimental details, refer to the [published paper](https://aclanthology.org/2026.wslp-1.21/).
+
+Runnable training and inference scripts, complete environment specifications, and model checkpoints are **not included in the repository at present**.
+
+---
+
+## Related Work
+
+Text-level CTC/attention supervision for sign language translation was previously explored by Tan *et al.* in:
+
+[**Improvement in Sign Language Translation Using Text CTC Alignment — COLING 2025**](https://aclanthology.org/2025.coling-main.219/)
+
+TransAlign-SLT builds on the motivation for translation-level temporal supervision by combining a decaying auxiliary TranslationCTC objective with Masked Entropic Optimal Transport for semantic alignment.
+
+This formulation provides complementary temporal and semantic guidance without relying on gloss annotations.
+
+---
+
+## Code Release Roadmap
+
+- [x] Paper accepted at WSLP 2026
+- [x] Paper published in the ACL Anthology
+- [x] Research overview and architecture documented
+- [x] Main benchmark results and ablation studies documented
 - [ ] Training and inference code
-- [ ] Dependencies, preprocessing, and configuration instructions
-- [ ] Checkpoints and reproducibility materials, where redistribution is permitted
+- [ ] Dependency and environment specifications
+- [ ] Dataset preprocessing instructions
+- [ ] Training and evaluation configurations
+- [ ] Model checkpoints, subject to redistribution permissions
+- [ ] Additional reproducibility materials
 
-Updates will be posted here when materials become available. **The current repository should not be treated as a runnable implementation.**
+Updates will be posted in this repository when materials become available.
+
+**Important:** The current repository documents the research and should not yet be treated as a runnable implementation.
+
+---
 
 ## Citation
 
-Please cite the accepted paper if you use this work. The following entry is **provisional** and should be replaced by the official ACL Anthology entry when it becomes available.
+If you find this work useful in your research, please cite our WSLP 2026 paper.
+
+**Publication:**
+
+Pallapu Mohan Krishna, Uppala Sanjay Kumar, M. K. Bhuyan, and Debanga Raj Neog. 2026. *TransAlign-SLT: Complementary Temporal and Semantic Supervision for Gloss-Free Sign Language Translation.* In Proceedings of the Second Workshop on Sign Language Processing, pages 213–223, Budapest, Hungary. Association for Computational Linguistics.
+
+**BibTeX:**
 
 ```bibtex
-@misc{pallapu2026transalign,
-  title  = {TransAlign-SLT: Complementary Temporal and Semantic Supervision for Gloss-Free Sign Language Translation},
-  author = {Pallapu, Mohan Krishna and Uppala, Sanjay Kumar and Bhuyan, M. K. and Neog, Debanga Raj},
-  year   = {2026},
-  note   = {Accepted at the Workshop on Sign Language Processing (WSLP 2026), co-located with EMNLP 2026}
+@inproceedings{pallapu2026transalign,
+  title     = {{TransAlign-SLT}: Complementary Temporal and Semantic Supervision for Gloss-Free Sign Language Translation},
+  author    = {Pallapu, Mohan Krishna and Uppala, Sanjay Kumar and Bhuyan, M. K. and Neog, Debanga Raj},
+  booktitle = {Proceedings of the Second Workshop on Sign Language Processing},
+  month     = oct,
+  year      = {2026},
+  address   = {Budapest, Hungary},
+  publisher = {Association for Computational Linguistics},
+  pages     = {213--223},
+  url       = {https://aclanthology.org/2026.wslp-1.21/}
 }
 ```
 
-## Contact and license
+**Official publication:** https://aclanthology.org/2026.wslp-1.21/
 
-**Corresponding author:** [Pallapu Mohan Krishna](https://pallapumohankrishna.github.io/) · [k.pallapu@iitg.ac.in](mailto:k.pallapu@iitg.ac.in)
+---
 
-The repository currently includes an [MIT License](LICENSE). Third-party assets, future datasets, and checkpoints may have separate terms stated at release.
+## Contact
+
+For research discussions, collaborations, or questions regarding this work:
+
+**Pallapu Mohan Krishna**
+
+PhD Researcher  
+Mehta Family School of Data Science and Artificial Intelligence  
+Indian Institute of Technology Guwahati, India
+
+- **Email:** [k.pallapu@iitg.ac.in](mailto:k.pallapu@iitg.ac.in)
+- **Website:** [pallapumohankrishna.github.io](https://pallapumohankrishna.github.io/)
+- **LinkedIn:** [Mohan Krishna Pallapu](https://www.linkedin.com/in/mohan-krishna-pallapu/)
+- **Project Page:** [TransAlign-SLT](https://pallapumohankrishna.github.io/projects/transalign-slt/)
+
+---
+
+## License
+
+This repository currently includes an [MIT License](LICENSE).
+
+Third-party assets, future datasets, and model checkpoints may be subject to separate licenses and redistribution restrictions, which will be specified when those resources are released.
